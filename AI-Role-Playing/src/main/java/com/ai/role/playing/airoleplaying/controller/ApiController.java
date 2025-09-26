@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api") // 统一接口前缀
 public class ApiController {
 
     // 测试接口：返回简单字符串

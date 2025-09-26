@@ -34,12 +34,9 @@
     <div class="right-panel">
       <!-- 聊天标题 -->
       <div v-if="currentCharacter" class="chat-header">
-        <div class="chat-avatar">{{ currentCharacter.slice(0, 2) }}</div>
-        <div>
-          <h3 style="margin: 0">{{ currentCharacter }}</h3>
-          <div style="font-size: 12px; color: #999">
-            当前模式：{{ replyMode === 'text' ? '文字回复' : '语音回复' }}
-          </div>
+        <h3 style="margin: 0">{{ currentCharacter }}</h3>
+        <div style="font-size: 12px; color: #999">
+          当前模式：{{ replyMode === 'text' ? '文字回复' : '语音回复' }}
         </div>
         <el-switch
           v-model="replyMode"
@@ -54,15 +51,7 @@
       <!-- 聊天消息 -->
       <div class="chat-messages" ref="messagesEl">
         <div v-for="(msg, idx) in messages" :key="idx" class="chat-row" :class="msg.role">
-          <!-- AI 消息 -->
-          <template v-if="msg.role === 'ai'">
-            <div class="avatar left">{{ currentCharacter.slice(0, 2) }}</div>
-            <div class="bubble ai">{{ msg.text }}</div>
-          </template>
-          <!-- 用户消息（无头像） -->
-          <template v-else>
-            <div class="bubble user">{{ msg.text }}</div>
-          </template>
+          <div class="bubble" :class="msg.role">{{ msg.text }}</div>
         </div>
       </div>
 
@@ -74,10 +63,11 @@
           size="medium"
           @keyup.enter.native="send"
         />
-        <el-button type="primary" @click="send">发送</el-button>
+        <el-button type="primary" @click="send" :loading="isLoading">发送</el-button>
         <el-button type="success" @click="startVoice" :disabled="isListening">
           🎤 {{ isListening ? '听中...' : '语音输入' }}
         </el-button>
+        <el-button type="danger" @click="stopAll">⏹ 中断</el-button>
       </div>
     </div>
   </div>
@@ -87,13 +77,14 @@
 import { ref, nextTick } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import request from '@/utils/request'
 
 const query = ref('')
 const input = ref('')
 const messages = ref([{ role: 'ai', text: '你好，我是哈利波特！你可以和我文字或语音交流。' }])
 const currentCharacter = ref('哈利波特')
+const isLoading = ref(false)
 
-// 回复模式：text（文字） / voice（语音）
 const replyMode = ref('text')
 
 const hotCharacters = [
@@ -115,24 +106,34 @@ function selectCharacter(c) {
   messages.value = [{ role: 'ai', text: `你好，我是 ${c.name}，现在可以开始和我对话啦！` }]
 }
 
-function send() {
+async function send() {
   if (!input.value) return
-  messages.value.push({ role: 'user', text: input.value })
+  const userMsg = input.value
+  input.value = ''
+  messages.value.push({ role: 'user', text: userMsg })
+  scrollToBottom()
 
-  // 模拟 AI 回复
-  setTimeout(() => {
-    const reply = `${currentCharacter.value} 回复: ${input.value}`
-    messages.value.push({ role: 'ai', text: reply })
+  const loadingMsg = { role: 'ai', text: '🤔 正在思考...' }
+  messages.value.push(loadingMsg)
+  scrollToBottom()
+  isLoading.value = true
+
+  try {
+    const res = await request.post('/chat', { message: userMsg })
+    const reply = res.data
+    messages.value[messages.value.length - 1] = { role: 'ai', text: reply }
     scrollToBottom()
 
-    // 如果是语音模式，则自动播报
     if (replyMode.value === 'voice') {
       speak(reply)
     }
-  }, 500)
-
-  input.value = ''
-  scrollToBottom()
+  } catch (error) {
+    messages.value[messages.value.length - 1] = { role: 'ai', text: '❌ 出错了，请稍后重试。' }
+    ElMessage.error('请求失败，请检查后端服务是否正常')
+    console.error(error)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 /* --- 语音输入 --- */
@@ -145,12 +146,8 @@ if ('webkitSpeechRecognition' in window) {
   recognition.interimResults = false
   recognition.maxAlternatives = 1
 
-  recognition.onstart = () => {
-    isListening.value = true
-  }
-  recognition.onend = () => {
-    isListening.value = false
-  }
+  recognition.onstart = () => (isListening.value = true)
+  recognition.onend = () => (isListening.value = false)
   recognition.onerror = () => {
     ElMessage.error('语音识别出错或不被支持')
     isListening.value = false
@@ -168,7 +165,6 @@ function startVoice() {
   if (recognition) recognition.start()
 }
 
-/* --- 语音播报（自动说话） --- */
 function speak(text) {
   if (!window.speechSynthesis) {
     ElMessage.warning('当前浏览器不支持语音播报')
@@ -178,9 +174,28 @@ function speak(text) {
   utter.lang = 'zh-CN'
   window.speechSynthesis.speak(utter)
 }
+
+function stopAll() {
+  if (recognition && isListening.value) {
+    recognition.stop()
+    isListening.value = false
+  }
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel()
+  }
+  ElMessage.info('已中断当前操作')
+}
 </script>
 
 <style scoped>
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
 .app-container {
   display: grid;
   grid-template-columns: 300px 1fr;
@@ -188,6 +203,7 @@ function speak(text) {
   height: 100vh;
   padding: 20px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .left-panel {
@@ -195,7 +211,21 @@ function speak(text) {
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  height: 95%; /* 保证左边满高 */
   overflow-y: auto;
+}
+
+.right-panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  height: 95%; /* 保证右边满高 */
+  overflow: hidden; /* 🚀 关键：禁止整体滚动 */
 }
 
 .character-card {
@@ -221,36 +251,17 @@ function speak(text) {
   font-weight: bold;
 }
 
-.right-panel {
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-}
-
 .chat-header {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
-}
-.chat-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  background: #67c23a;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
+  flex-shrink: 0;
 }
 
 .chat-messages {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: auto; /* ✅ 单独滚动 */
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -259,17 +270,15 @@ function speak(text) {
 
 .chat-row {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
   max-width: 70%;
 }
 
 .chat-row.ai {
-  flex-direction: row;
+  justify-content: flex-start;
 }
 .chat-row.user {
-  flex-direction: row-reverse;
   align-self: flex-end;
+  justify-content: flex-end;
 }
 
 .bubble {
@@ -277,6 +286,7 @@ function speak(text) {
   border-radius: 12px;
   line-height: 1.4;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  word-break: break-word;
 }
 
 .bubble.ai {
@@ -287,22 +297,10 @@ function speak(text) {
   color: white;
 }
 
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #67c23a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: bold;
-  color: white;
-}
-
 .chat-input {
   display: flex;
   gap: 10px;
   margin-top: 12px;
+  flex-shrink: 0;
 }
 </style>

@@ -1,4 +1,9 @@
 # Logs
+# git add .
+# git commit -m "提交说明：描述本次提交的内容"
+# git push -u origin 分支名
+
+
 logs
 *.log
 npm-debug.log*

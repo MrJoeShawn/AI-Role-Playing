@@ -20,6 +20,7 @@
     "@fortawesome/vue-fontawesome": "^3.1.2",
     "axios": "^1.12.2",
     "element-plus": "^2.11.3",
+    "normalize.css": "^8.0.1",
     "pinia": "^3.0.3",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"

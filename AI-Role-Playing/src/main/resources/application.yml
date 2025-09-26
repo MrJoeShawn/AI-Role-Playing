@@ -6,3 +6,8 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
 
+coze:
+  api-key: ${COZE_API_KEY:pat_MO9AFZ183GECoYQsonTRp0ILUPVSBHwppvkJxoYIw9vvKgc2C0bUbGbzbT6Xqhyl}
+  api-endpoint: ${COZE_API_ENDPOINT:https://api.coze.cn} #这里不用改
+  bot-id: ${COZE_BOT_ID:7552830168059068459}
+
